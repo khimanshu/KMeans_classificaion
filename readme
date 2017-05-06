@@ -1,0 +1,5 @@
+1)Run the script file hk0014Ae0027KFold.sh by typing "bash ./hk0014Ae0027.sh"
+
+2)You get the output file hk0014Ae0027KFold
+
+3)Run the output file hk0014Ae0027KFold by typing ./hk0014Ae0027KFold bcwdisc.arff

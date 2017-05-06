@@ -1,0 +1,243 @@
+// filename - hk0014KFold.cpp
+// Student name - Sai Raghava Srinath Dasari
+// date - 04/ 20/ 2016
+
+
+#include "algorithm"
+#include "iostream"
+#include "stdio.h"
+#include "map"
+#include "vector"
+#include "string.h"
+#include "string"
+#include "memory.h"
+
+using namespace std;
+
+#define MAXN 10000 //maximum size of data
+#define MAXA 100 // maximum number of attributes
+#define MAXC 100 // maximum number of classes
+
+vector<int> data[MAXN]; // stores data
+vector<int> attrib[MAXA]; // stores the kinds of each attribute
+
+map<string, int>mp;
+int idx[MAXN]; // indicates which fold the data is in
+int clas[MAXN]; // class index of the data
+int cnt[MAXC][MAXA], count_class[MAXC];
+
+bool cmp(int u, int v){
+	return idx[u]<idx[v];
+}
+
+void partition(int N, int K) {
+	// randomly partition data (size N) into K folds
+	// each fold has approximately same number of data
+	// the difference of size between small and large fold is 1
+
+	int tmpid[MAXN], cur_fold;
+	int i, j, t, size_smallfold, size_largefold, count_largefold, count_smallfold;
+
+	for (i=0; i<N; i++) tmpid[i]=i;
+	for (i=0; i<N; i++) {
+		j=rand()%N;
+		t=tmpid[i]; tmpid[i]=tmpid[j]; tmpid[j]=t;
+	}
+	size_smallfold=N/K; // size of small fold
+	size_largefold=size_smallfold+1;
+	count_largefold=N%K; // count of large folds
+	count_smallfold=K-count_largefold;
+
+	for (i=0, cur_fold=0; cur_fold<count_smallfold; i+=size_smallfold, cur_fold++) {
+		for (j=0; j<size_smallfold; j++) idx[tmpid[i+j]]=cur_fold;
+	}
+	for (; cur_fold<K; cur_fold++, i+=size_largefold) {
+		for (j=0; j<size_largefold; j++) idx[tmpid[i+j]]=cur_fold;
+	}
+}
+
+int confusion_matrix[MAXC][MAXC];
+
+int main(int argc, char **argv)
+{
+	int i, K, N, curtest_id, t, a, s, j, num_attr, class_id;
+	int id[MAXN], num_class, assign[MAXN];
+	int getinput, attr_size;
+	double maxp, overallaccuracy, tp;
+
+	mp.clear();
+	for (i=0; i<MAXN; i++) data[i].clear();
+	for (i=0; i<MAXA; i++) attrib[i].clear();
+
+	char inputfilename[50], attrib_name[50];
+	char mylogin[50]; // login name;
+
+	strcpy(mylogin, "sd0043"); // add login name here
+
+	//strcpy(inputfilename, "bcwdisc.arff");
+	strcpy(inputfilename, argv[2]);
+	FILE * f1=fopen(inputfilename, "r");
+
+	// make outputfilename
+
+	char outputfilename1[50], outputfilename2[50], *tok;
+
+	strcpy(outputfilename1, mylogin);
+	strcat(outputfilename1, "KFoldClassification");
+	strcat(outputfilename1, inputfilename);
+
+	strcpy(outputfilename2, mylogin);
+	strcat(outputfilename2, "KFoldConfusion");
+	tok=strchr(inputfilename, '.');
+	if (tok) *tok=0;
+	strcat(outputfilename2, inputfilename);
+	strcat(outputfilename2, ".txt");
+
+	FILE * f2=fopen(outputfilename1, "w");
+
+	if (argc>6) K=atoi(argv[6]); // count of folds
+	else K=10;
+
+	N=0; num_attr=0, num_class=0;
+
+	char str[200], tmp[200];
+
+	// get input from given file
+
+	while(fgets(str, 200, f1)) {
+		if (str[strlen(str)-1]<33) {
+			str[strlen(str)-1]=0;
+		}
+		if (!strcmp(str, "")) continue;
+		if (strcmp(str, "@data")==0) break;
+		strcpy(tmp, str);
+
+		if (strlen(str)>9 && strstr(str, "@attribute")) {
+			strcpy(str, str+10);
+			sscanf(str, " %s", attrib_name);
+			mp[attrib_name]=num_attr;
+			strcpy(str, str+strlen(attrib_name)+1);
+			str[strlen(str)-1]=0;
+			tok=strtok(str, "} ,{");
+			do {
+				attrib[num_attr].push_back(atoi(tok));
+			} while (tok=strtok(NULL, "} ,{"));
+			if (!strcmp(attrib_name, "class")) {
+				num_class=attrib[num_attr].size();
+				class_id=num_attr;
+			} else fprintf(f2, "%s\n", tmp);
+			num_attr++;
+		} else fprintf(f2, "%s\n\n", tmp);
+	}
+
+	while(true) {
+		for (i=0; i<num_attr; i++) {
+			getinput=fscanf(f1, "%s ", str);
+			if (getinput!=1) break;
+			attr_size=attrib[i].size();
+			for (j=0; j<attr_size; j++) {
+				if (attrib[i][j]==atoi(str)) break;
+			}
+			if (i==class_id) clas[N]=j;
+			else data[N].push_back(j);
+		}
+		if (i<num_attr) break;
+		N++;
+	}
+
+	num_attr--;
+	fclose(f1);
+
+	partition(N, K); // partition data into K folds, idx[i] is the fold index of data[i]
+
+	for (i=0; i<N; i++) id[i]=i;
+	sort(id, id+N, cmp);
+
+	j=0;
+
+	for (i=0; i<K; i++) { // ith fold
+		for (; j<N && idx[id[j]]==i; j++) {
+			curtest_id=id[j]; // id[j] is currently tested index
+			for (t=0; t<MAXC; t++) {
+				for (a=0; a<MAXA; a++) cnt[t][a]=0;
+			}
+			//memset(cnt, 0, sizeof(cnt[0][0]));
+			for (t=0; t<MAXC; t++) count_class[t]=0;
+			//memset(count_class, 0, sizeof(count_class[0]));
+
+			for (t=0; t<N; t++) {
+				if (idx[t]==idx[curtest_id]) continue; // if id[t] is in the ith fold
+				count_class[clas[t]]++;
+				for (a=0; a<num_attr; a++) {
+					if (data[t][a]==data[curtest_id][a]) cnt[clas[t]][a]++;
+				}
+			}
+
+			// choose class which gives maximum likelihood
+
+			maxp=-1; assign[curtest_id]=0;
+			for (t=0; t<num_class; t++) {
+				tp=count_class[t];
+				if (tp<1e-8) continue;
+				for (a=0; a<num_attr; a++) tp=tp*cnt[t][a]/count_class[t];
+				if (tp>maxp) {
+					maxp=tp;
+					assign[curtest_id]=t;
+				}
+			}
+		}
+	}
+
+	// write predicted classification
+	fprintf(f2, "@attribute class {");
+	for (i=0; i<attrib[class_id].size(); i++) {
+		if (i) fprintf(f2, ", ");
+		fprintf(f2, "%d", attrib[class_id][i]);
+	}
+	fprintf(f2, "}\n");
+
+	fprintf(f2, "@attribute bayesClass {");
+	for (i=0; i<attrib[class_id].size(); i++) {
+		if (i) fprintf(f2, ", ");
+		fprintf(f2, "%d", attrib[class_id][i]);
+	}
+	fprintf(f2, "}\n\n@data\n");
+
+	for (i=0; i<N; i++) {
+		for (j=0; j<num_attr; j++) fprintf(f2, " %d", attrib[j][data[i][j]]);
+		fprintf(f2, " %d %d\n", attrib[class_id][clas[i]], attrib[class_id][assign[i]]);
+	}
+
+	fclose(f2);
+
+	// writing confusion matrix and overall accuracy score
+
+	f2=fopen(outputfilename2, "w");
+
+	memset(confusion_matrix, 0, sizeof(confusion_matrix));
+
+	// deduce confusion matrix
+
+	for (i=0; i<N; i++) {
+		confusion_matrix[clas[i]][assign[i]]++;
+	}
+	for (i=0, overallaccuracy=0; i<num_class; i++) overallaccuracy+=confusion_matrix[i][i];
+	overallaccuracy/=N; // overall accuracy score
+
+	//		writing confusion matrix
+
+	fprintf(f2, "confusion matrix:\n");
+
+	for (i=0; i<num_class; i++) fprintf(f2, "\tA%d", attrib[class_id][i]);
+	for (i=0; i<num_class; i++) {
+		fprintf(f2, "\nT%d", attrib[class_id][i]);
+		for (j=0; j<num_class; j++) fprintf(f2, "\t%d", confusion_matrix[i][j]);
+	}
+
+	//		writing overall accuracy score
+
+	fprintf(f2,"\nOverall Accuracy Score:\n%lf", overallaccuracy);
+	fclose(f2);
+	return 0;
+}
+

@@ -1,0 +1,7 @@
+//hk0014Ae0027KFold
+confusion matrix:
+	A2	A4
+T2	431	13
+T4	3	236
+Overall Accuracy Score:
+0.976574
